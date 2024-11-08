@@ -1,2 +1,5 @@
-# stream-contagion
-GROUP FORMATION AND SOCIAL CONTAGION IN LIVESTREAM CHATS
+# Stream Contagion
+
+## Group Formation And Social Contagion in Livestream Chats
+
+This project seeks to quantify social contagion within Twitch chat logs.
