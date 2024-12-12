@@ -1,20 +1,36 @@
+import CSVPreprocessor
 import os
 import csv
 import re
-from collections import deque
+import json
 
 LOG_FOLDER = "chat_logs"
+EVENT_FOLDER = "contagion_events"
 # Allowable elapsed time from last matching message
-SPAM_THRESHOLD = 20
+SPAM_THRESHOLD = 15
 # Seconds after inital msg that user is still considered a leader
 LEADER_DURATION = 5
 # Fewest number of followers for a valid contagion event
-MIN_FOLLOWERS = 100
+MIN_FOLLOWERS = 10
 
-class FindContagion:
+class IdentifyContagionEvents:
     def __init__(self):
         self.log_files = [os.path.join(LOG_FOLDER, file) for file in os.listdir(LOG_FOLDER) if file.endswith('.csv')]
         self.current_log_index = 0
+        self.current_log_name = ""
+        
+    def delete_processed_file(self):
+        """Deletes all files prefixed with 'processed' in the given folder."""
+        try:
+            for file_name in os.listdir(LOG_FOLDER):
+                if file_name.startswith("processed"):
+                    file_path = os.path.join(LOG_FOLDER, file_name)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        print(f"Deleted: {file_path}")
+            print("Processed files deletion complete.")
+        except Exception as e:
+            print(f"Error deleting processed files: {e}")
 
     def load_next_log(self):
         """Loads the next chat log."""
@@ -24,18 +40,35 @@ class FindContagion:
 
         log_file = self.log_files[self.current_log_index]
 
+        log_dir = os.path.dirname(log_file)
+        log_filename = os.path.basename(log_file)
+
+        new_filename = f"processed_{log_filename}"
+
+        new_log_file = os.path.join(log_dir, new_filename)
+
         try:
-            with open(log_file, "r", encoding="utf-8") as file:
+            CSVPreprocessor.processCSV(log_file, new_log_file)
+            with open(new_log_file, "r", encoding="utf-8") as file:
                 reader = csv.reader(file)
                 next(reader)
-                # Row format: (seconds int, username string, message string, processed bool)
-                chat_log = [(int(row[0]), row[1], row[3], False) for row in reader]
+
+                chat_log = []
+                for row in reader:
+                    chat_log.append((int(row[0]), row[1], row[3], False))
+
+            self.delete_processed_file()
+
             self.current_log_index += 1
+            base, _ = os.path.splitext(log_filename)
+            self.current_log_name = base
             return chat_log
 
         except FileNotFoundError:
             print(f"File {log_file} not found, program ended.")
+            self.delete_processed_file()
             return None
+
 
     def get_contagion_event(self, chat_log):
         """Converts 'social contagion' into discrete events with a common message and time."""
@@ -156,25 +189,21 @@ class FindContagion:
 
         return False
 
-    def display_contagion(self, contagion_events):
+    def export_contagion_events(self, contagion_events):
         """Displays contagion events as a chart/graph with leaders and followers."""
         if not contagion_events:
             print("No contagion events found.")
             return
-        #'''
-        # Print event data
-        for event in contagion_events:
-            print(f"Contagion Event - Start Time: {event['start_time']}, Message: '{event['message']}'")
-            print(f"  Leaders: {', '.join(event['leaders'])}")
-            print(f"  Followers: {', '.join(event['followers'])}")
-            print("-" * 40)
-        #'''
+        print(f"Created {len(contagion_events)} contagion events")
+        with open(f'{EVENT_FOLDER}/{self.current_log_name}.json', 'w') as file:
+            json.dump(contagion_events, file)
+
 # Run
-contagion_detector = FindContagion()
+contagion_detector = IdentifyContagionEvents()
 
 while True:
     chat_log = contagion_detector.load_next_log()
     if not chat_log:
         break
     contagion_events = contagion_detector.get_contagion_event(chat_log)
-    contagion_detector.display_contagion(contagion_events)
+    contagion_detector.export_contagion_events(contagion_events)
